@@ -10,15 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.5.1/mammoth.browser.min.js"></script>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        #editor {
-            outline: none;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            min-height: 40vh;
-        }
+        body { font-family: 'Inter', sans-serif; }
+        #editor { outline: none; white-space: pre-wrap; word-wrap: break-word; min-height: 40vh; }
         .highlight { border-radius: 3px; padding: 1px 0; cursor: pointer; }
         .highlight-spell { background-color: rgba(255, 219, 219, 0.8); border-bottom: 2px dotted #ef4444; }
         .highlight-grammar { background-color: rgba(219, 234, 254, 0.8); border-bottom: 2px dotted #3b82f6; }
@@ -29,10 +22,9 @@
         .suggestion-btn:hover { background-color: #4b5563; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .tone-option-btn { background-color: #f3f4f6; color: #1f2937; padding: 10px; border-radius: 8px; text-align: center; font-weight: 500; transition: all 0.2s; border: 1px solid #d1d5db; }
-        .tone-option-btn:hover { background-color: #e5e7eb; transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .api-key-bar { transition: background-color 0.3s; }
         #fileUploadLabel { cursor: pointer; }
+        #progressBar { transition: width 0.3s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -54,7 +46,7 @@
             <p id="apiKeyStatus" class="text-sm text-red-700 mt-2">To use the AI features, you need a free Google AI API key. <a href="https://aistudio.google.com/app/apikey" target="_blank" class="font-semibold underline hover:text-red-800">Get one here.</a></p>
         </div>
 
-        <!-- NEW: File Upload Section -->
+        <!-- File Upload Section -->
         <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 md:p-8 mb-6">
             <h2 class="text-2xl font-bold mb-4 text-gray-800">1. Upload Document</h2>
             <div class="flex items-center justify-center w-full">
@@ -66,7 +58,11 @@
                     </div>
                     <input id="fileUpload" type="file" class="hidden" accept=".pdf,.docx" />
                 </label>
-            </div> 
+            </div>
+            <!-- NEW: Progress Bar -->
+            <div id="progressContainer" class="w-full bg-gray-200 rounded-full h-2.5 mt-3 hidden">
+                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
             <p id="fileName" class="text-center text-gray-600 mt-3 font-medium"></p>
         </div>
 
@@ -77,6 +73,8 @@
                 <button id="plagiarismBtn" class="action-btn flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Plagiarism Check</button>
                 <button id="factCheckBtn" class="action-btn flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Fact-Check</button>
                 <button id="summarizeBtn" class="action-btn flex-1 sm:flex-none bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Summarize</button>
+                <!-- NEW: Read Aloud Button -->
+                <button id="readAloudBtn" class="action-btn flex-1 sm:flex-none bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Read Aloud</button>
                 <button id="clearHighlightsBtn" class="flex-1 sm:flex-none bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Clear Highlights</button>
             </div>
             
@@ -88,9 +86,14 @@
                 <div id="loader" class="loader hidden"></div>
                 <span id="statusText">Ready</span>
             </div>
+            
+            <!-- NEW: Audio Player -->
+            <div id="audioPlayerContainer" class="mt-4 hidden">
+                <audio id="audioPlayer" controls class="w-full"></audio>
+            </div>
         </main>
         
-        <!-- MODALS (Unchanged from previous version) -->
+        <!-- MODALS -->
         <div id="resultsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
@@ -107,59 +110,66 @@
     </div>
 
     <script>
-        // Set workerSrc for pdf.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
         
-        // DOM Elements
         const editor = document.getElementById('editor');
-        const statusBar = document.getElementById('statusBar');
         const statusText = document.getElementById('statusText');
         const loader = document.getElementById('loader');
-        
-        // File Upload
         const fileUpload = document.getElementById('fileUpload');
         const fileNameDisplay = document.getElementById('fileName');
-
-        // Buttons
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+        const audioPlayer = document.getElementById('audioPlayer');
         const actionButtons = document.querySelectorAll('.action-btn');
         const clearHighlightsBtn = document.getElementById('clearHighlightsBtn');
-        
-        // API Key Section
         const apiKeySection = document.getElementById('apiKeySection');
         const apiKeyInput = document.getElementById('apiKeyInput');
         const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
         const apiKeyStatus = document.getElementById('apiKeyStatus');
-
-        // Modals
         const resultsModal = document.getElementById('resultsModal');
         const modalTitle = document.getElementById('modalTitle');
         const modalContent = document.getElementById('modalContent');
         const closeModalBtn = document.getElementById('closeModalBtn');
-
-        // Tooltip
         const tooltip = document.getElementById('tooltip');
         const tooltipContent = document.getElementById('tooltipContent');
 
-        // State Management
         let userApiKey = '';
         let originalTextMap = new Map();
         let suggestionCounter = 0;
+        let currentAudioUrl = null;
         
         function setStatus(text, isLoading = false) {
             statusText.textContent = text;
             loader.classList.toggle('hidden', !isLoading);
         }
 
-        // --- NEW: File Handling Logic ---
         fileUpload.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (!file) return;
 
+            actionButtons.forEach(btn => btn.disabled = true);
             fileNameDisplay.textContent = `Loading: ${file.name}`;
             setStatus(`Processing ${file.name}...`, true);
-            editor.textContent = ''; // Clear previous content
+            editor.textContent = '';
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
 
             const reader = new FileReader();
+            
+            const onSuccess = (fileName) => {
+                setStatus(`Successfully loaded ${fileName}. Ready to review.`);
+                fileNameDisplay.textContent = `Loaded: ${fileName}`;
+                if (userApiKey) actionButtons.forEach(btn => btn.disabled = false);
+                setTimeout(() => progressContainer.classList.add('hidden'), 500);
+            };
+
+            const onError = (fileName, errorMsg) => {
+                console.error(errorMsg);
+                setStatus(`Error: Could not read ${fileName}.`);
+                fileNameDisplay.textContent = `Failed to load: ${fileName}`;
+                progressContainer.classList.add('hidden');
+            };
 
             if (file.name.endsWith('.pdf')) {
                 reader.onload = async (e) => {
@@ -170,36 +180,36 @@
                             const page = await pdf.getPage(i);
                             const text = await page.getTextContent();
                             textContent += text.items.map(s => s.str).join(' ') + '\n\n';
+                            progressBar.style.width = `${(i / pdf.numPages) * 100}%`;
                         }
                         editor.textContent = textContent;
-                        setStatus(`Successfully loaded ${file.name}. Ready to review.`);
+                        onSuccess(file.name);
                     } catch (error) {
-                        console.error('Error parsing PDF:', error);
-                        setStatus(`Error: Could not read ${file.name}.`);
+                        onError(file.name, `Error parsing PDF: ${error}`);
                     }
                 };
                 reader.readAsArrayBuffer(file);
             } else if (file.name.endsWith('.docx')) {
+                progressBar.style.width = '50%'; // Indeterminate progress for docx
                 reader.onload = (e) => {
                     mammoth.extractRawText({ arrayBuffer: e.target.result })
                         .then(result => {
                             editor.textContent = result.value;
-                             setStatus(`Successfully loaded ${file.name}. Ready to review.`);
+                            progressBar.style.width = '100%';
+                            onSuccess(file.name);
                         })
                         .catch(error => {
-                            console.error('Error parsing DOCX:', error);
-                            setStatus(`Error: Could not read ${file.name}.`);
+                            onError(file.name, `Error parsing DOCX: ${error}`);
                         });
                 };
                 reader.readAsArrayBuffer(file);
             } else {
-                 setStatus('Error: Unsupported file type. Please upload a .pdf or .docx file.');
+                onError(file.name, 'Unsupported file type.');
+                setStatus('Error: Unsupported file type. Please upload a .pdf or .docx file.');
             }
-             fileNameDisplay.textContent = `Loaded: ${file.name}`;
         });
-
-        // --- API Key Management (Unchanged) ---
-        function saveApiKey() { /* ... unchanged ... */ 
+        
+        function saveApiKey() { 
             const key = apiKeyInput.value.trim();
             if (key) {
                 localStorage.setItem('geminiApiKey', key);
@@ -208,7 +218,7 @@
                 setStatus('API Key saved. Ready to use!');
             }
         }
-        function updateApiKeyUI(isValid) { /* ... unchanged ... */
+        function updateApiKeyUI(isValid) {
             if (isValid) {
                 apiKeySection.classList.replace('bg-red-100', 'bg-green-100');
                 apiKeySection.classList.replace('border-red-300', 'border-green-300');
@@ -217,7 +227,11 @@
                 document.getElementById('removeKeyLink')?.addEventListener('click', removeApiKey);
                 apiKeyInput.style.display = 'none';
                 saveApiKeyBtn.style.display = 'none';
-                actionButtons.forEach(btn => btn.disabled = false);
+                if (editor.textContent.trim()) {
+                    actionButtons.forEach(btn => btn.disabled = false);
+                } else {
+                    actionButtons.forEach(btn => btn.disabled = true);
+                }
             } else {
                 apiKeySection.classList.replace('bg-green-100', 'bg-red-100');
                 apiKeySection.classList.replace('border-green-300', 'border-red-300');
@@ -229,13 +243,13 @@
                 userApiKey = '';
             }
          }
-        function removeApiKey(e) { /* ... unchanged ... */ 
+        function removeApiKey(e) { 
             e.preventDefault();
             localStorage.removeItem('geminiApiKey');
             updateApiKeyUI(false);
             setStatus('API Key removed.');
         }
-        function loadApiKey() { /* ... unchanged ... */ 
+        function loadApiKey() { 
             const savedKey = localStorage.getItem('geminiApiKey');
             if (savedKey) {
                 userApiKey = savedKey;
@@ -245,7 +259,6 @@
             }
         }
         
-        // --- Core API Call & Feature Implementations (Unchanged) ---
         async function callGeminiAPI(model, payload, retries = 3, delay = 1000) {
             if (!userApiKey) { setStatus('Error: API Key is not set.'); return null; }
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${userApiKey}`;
@@ -263,13 +276,12 @@
         }
         async function checkGrammarAndStyle() {
             const text = editor.textContent;
-            if (!text.trim()) return setStatus('Editor is empty. Upload a file first.');
+            if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking grammar and style...', true);
             const systemPrompt = `You are a writing assistant. Analyze the text for spelling, grammar, and style errors. Respond with a JSON array of objects. Each object needs: "original", "suggestion", "type" ("highlight-spell" or "highlight-grammar"), and "explanation".`;
             const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
-            // ... rest of function is unchanged
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
                 const errors = JSON.parse(jsonResponse);
@@ -293,13 +305,12 @@
         }
         async function checkPlagiarism() {
             const text = editor.textContent;
-            if (!text.trim()) return setStatus('Editor is empty. Upload a file first.');
+            if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking for plagiarism...', true);
             const systemPrompt = "Analyze the text. Find sentences that might be plagiarized by searching for exact matches online. Return a JSON object: { 'plagiarismSources': [ { 'sentence': '...', 'source': '...' } ] }.";
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
-            // ... rest of function is unchanged
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
                 const results = JSON.parse(jsonResponse);
@@ -318,19 +329,17 @@
         }
         async function factCheck() {
             const text = editor.textContent;
-            if (!text.trim()) return setStatus('Editor is empty. Upload a file first.');
+            if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Identifying and verifying facts...', true);
             const claimPrompt = `From the text, identify verifiable factual claims. Return a JSON object: { "claims": ["claim 1", "claim 2"] }. Text: """${text}"""`;
             const claimPayload = { contents: [{ parts: [{ text: claimPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
             const claimResponse = await callGeminiAPI('gemini-2.5-flash-preview-05-20', claimPayload);
             if (!claimResponse) return;
-            // ... rest of function is unchanged
             let claims;
             try { claims = JSON.parse(claimResponse.candidates?.[0]?.content?.parts?.[0]?.text).claims; } catch (e) { return setStatus('Could not identify facts to check.'); }
             if (!claims || claims.length === 0) return setStatus('No verifiable facts found in the text.');
             
             setStatus(`Found ${claims.length} claims. Verifying...`, true);
-
             const verificationPromises = claims.map(claim => {
                  const verifyPrompt = `Verify this claim: "${claim}". Provide a short summary, a confidence level ("Verified", "Uncertain", "False", etc.), and the top source URL. Respond in JSON format: {"claim": "...", "summary": "...", "confidence": "...", "source": "..."}`;
                  const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
@@ -353,7 +362,7 @@
         }
         async function summarizeText() {
             const text = editor.textContent;
-            if (!text.trim()) return setStatus('Editor is empty. Upload a file first.');
+            if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Summarizing text...', true);
             const systemPrompt = "Summarize the text into key bullet points using HTML list formatting (`<ul>` and `<li>`).";
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
@@ -361,8 +370,30 @@
             if (result) showModal('Summary', result.candidates?.[0]?.content?.parts?.[0]?.text);
             setStatus('Summary complete.');
         }
+        async function readAloud() {
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Generating audio...', true);
+            if(currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+            const payload = { contents: [{ parts: [{ text: `Say this naturally: ${text}` }] }], generationConfig: { responseModalities: ["AUDIO"] } };
+            const result = await callGeminiAPI('gemini-2.5-flash-preview-tts', payload);
+            const audioData = result?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (!audioData) return setStatus('Failed to generate audio.');
+            try {
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBlob = pcmToWav(pcm16);
+                currentAudioUrl = URL.createObjectURL(wavBlob);
+                audioPlayer.src = currentAudioUrl;
+                audioPlayerContainer.classList.remove('hidden');
+                audioPlayer.play();
+                setStatus('Playing audio.');
+            } catch (e) {
+                console.error("Error processing audio data:", e);
+                setStatus('Error playing audio.');
+            }
+        }
 
-        // --- Event Listeners and Initializer ---
         document.addEventListener('DOMContentLoaded', () => {
             loadApiKey();
             saveApiKeyBtn.addEventListener('click', saveApiKey);
@@ -370,6 +401,7 @@
             document.getElementById('plagiarismBtn').addEventListener('click', checkPlagiarism);
             document.getElementById('factCheckBtn').addEventListener('click', factCheck);
             document.getElementById('summarizeBtn').addEventListener('click', summarizeText);
+            document.getElementById('readAloudBtn').addEventListener('click', readAloud);
             clearHighlightsBtn.addEventListener('click', clearHighlights);
             closeModalBtn.addEventListener('click', () => resultsModal.style.display = 'none');
 
@@ -386,13 +418,44 @@
             document.addEventListener('click', (e) => { if (!tooltip.contains(e.target) || !e.target.closest('.highlight')) hideTooltip(); });
         });
         
-        // --- All unchanged helper functions from the previous version below ---
         function showModal(title, content) { modalTitle.textContent = title; modalContent.innerHTML = content; resultsModal.style.display = 'flex'; }
         function showTooltip(targetElement, content) { tooltipContent.innerHTML = content; tooltip.style.display = 'block'; const rect = targetElement.getBoundingClientRect(); tooltip.style.left = `${rect.left + window.scrollX + (rect.width / 2) - (tooltip.offsetWidth / 2)}px`; tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`; }
         function hideTooltip() { tooltip.style.display = 'none'; }
         function applySuggestion(spanId, suggestion) { const span = document.getElementById(spanId); if (span) { span.replaceWith(document.createTextNode(suggestion)); editor.normalize(); hideTooltip(); } }
-        function applyHighlights(highlights) { let content = editor.textContent; let offset = 0; highlights.sort((a, b) => a.index - b.index); highlights.forEach(h => { suggestionCounter++; const id = `suggestion-${suggestionCounter}`; originalTextMap.set(id, h.original); const before = content.substring(0, h.index + offset); const original = content.substring(h.index + offset, h.index + offset + h.original.length); const after = content.substring(h.index + offset + h.original.length); const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`; content = before + span + after; offset += span.length - h.original.length; }); editor.innerHTML = content; }
+        function applyHighlights(highlights) { let content = editor.textContent; let offset = 0; highlights.sort((a, b) => a.index - b.index); highlights.forEach(h => { suggestionCounter++; const id = `suggestion-${suggestionCounter}`; originalTextMap.set(id, h.original); const before = content.substring(0, h.index + offset); const original = content.substring(h.index + offset, h.original.length); const after = content.substring(h.index + offset + h.original.length); const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`; content = before + span + after; offset += span.length - h.original.length; }); editor.innerHTML = content; }
         function clearHighlights() { setStatus('Clearing highlights...'); editor.querySelectorAll('.highlight').forEach(span => { const originalText = originalTextMap.get(span.id) || span.textContent; span.replaceWith(document.createTextNode(originalText)); }); editor.normalize(); setStatus('Ready'); hideTooltip(); }
+        
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+            return bytes.buffer;
+        }
+        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+            const blockAlign = channels * (bitsPerSample / 8);
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = pcmData.length * (bitsPerSample / 8);
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+            function writeString(view, offset, string) { for (let i = 0; i < string.length; i++) { view.setUint8(offset + i, string.charCodeAt(i)); } }
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, channels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+            let offset = 44;
+            for (let i = 0; i < pcmData.length; i++, offset += 2) { view.setInt16(offset, pcmData[i], true); }
+            return new Blob([view], { type: 'audio/wav' });
+        }
     </script>
 </body>
 </html>

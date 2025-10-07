@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntelliWrite Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for the editor and highlights */
+        #editor {
+            outline: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            min-height: 50vh;
+        }
+        .highlight {
+            border-radius: 3px;
+            padding: 1px 0;
+            cursor: pointer;
+        }
+        .highlight-spell {
+            background-color: rgba(255, 219, 219, 0.8);
+            border-bottom: 2px dotted #ef4444;
+        }
+        .highlight-grammar {
+            background-color: rgba(219, 234, 254, 0.8);
+            border-bottom: 2px dotted #3b82f6;
+        }
+        .highlight-fact {
+             background-color: rgba(222, 247, 222, 0.8);
+            border-bottom: 2px dotted #10b981;
+        }
+        /* Tooltip for suggestions */
+        .tooltip {
+            position: absolute;
+            display: none;
+            background-color: #1f2937;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 300px;
+        }
+        .tooltip-arrow {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent transparent #1f2937 transparent;
+        }
+        .suggestion-btn {
+            background-color: #374151;
+            color: #d1d5db;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            margin-right: 4px;
+            border: 1px solid #4b5563;
+        }
+        .suggestion-btn:hover {
+            background-color: #4b5563;
+        }
+        /* Loader styles */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Tone modal button styles */
+        .tone-option-btn {
+            background-color: #f3f4f6;
+            color: #1f2937;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 1px solid #d1d5db;
+        }
+        .tone-option-btn:hover {
+            background-color: #e5e7eb;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900">IntelliWrite Assistant</h1>
+            <p class="text-gray-600 mt-2">Your AI-powered partner for perfect writing.</p>
+        </header>
+
+        <main class="bg-white rounded-xl shadow-lg p-4 sm:p-6 md:p-8">
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap gap-2 md:gap-4 border-b border-gray-200 pb-4 mb-4">
+                <button id="checkGrammarBtn" class="flex-1 sm:flex-none bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Grammar & Style</button>
+                <button id="plagiarismBtn" class="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Plagiarism Check</button>
+                <button id="factCheckBtn" class="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Fact-Check</button>
+                <button id="getIdeasBtn" class="flex-1 sm:flex-none bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Get Ideas</button>
+                <button id="summarizeBtn" class="flex-1 sm:flex-none bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">✨ Summarize</button>
+                <button id="toneBtn" class="flex-1 sm:flex-none bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">✨ Change Tone</button>
+                <button id="readAloudBtn" class="flex-1 sm:flex-none bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">✨ Read Aloud</button>
+                <button id="clearHighlightsBtn" class="flex-1 sm:flex-none bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Clear Highlights</button>
+            </div>
+            
+            <!-- Editor -->
+            <div id="editor-container" class="border border-gray-300 rounded-lg p-4 focus-within:ring-2 focus-within:ring-blue-400">
+                <div id="editor" contenteditable="true" aria-multiline="true" role="textbox" aria-label="Text editor"></div>
+            </div>
+
+             <!-- Status Bar -->
+            <div id="statusBar" class="text-sm text-gray-500 mt-2 h-6 flex items-center gap-2">
+                <div id="loader" class="loader hidden"></div>
+                <span id="statusText">Ready</span>
+            </div>
+
+            <!-- Audio Player -->
+            <div id="audioPlayerContainer" class="mt-4 hidden">
+                <audio id="audioPlayer" controls class="w-full"></audio>
+            </div>
+        </main>
+        
+        <!-- Results Modal -->
+        <div id="resultsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="modalTitle" class="text-xl font-bold">Results</h3>
+                    <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                </div>
+                <div id="modalContent" class="text-gray-700"></div>
+            </div>
+        </div>
+
+        <!-- Tone Selection Modal -->
+        <div id="toneModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h3 class="text-xl font-bold mb-4">Select a New Tone</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <button class="tone-option-btn" data-tone="Formal">Formal</button>
+                    <button class="tone-option-btn" data-tone="Casual">Casual</button>
+                    <button class="tone-option-btn" data-tone="Confident">Confident</button>
+                    <button class="tone-option-btn" data-tone="Persuasive">Persuasive</button>
+                    <button class="tone-option-btn" data-tone="Academic">Academic</button>
+                    <button class="tone-option-btn" data-tone="Simpler">Simpler</button>
+                </div>
+                <button id="closeToneModalBtn" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Tooltip -->
+        <div id="tooltip" class="tooltip">
+            <div id="tooltipContent"></div>
+            <div class="tooltip-arrow"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const editor = document.getElementById('editor');
+        const statusBar = document.getElementById('statusBar');
+        const statusText = document.getElementById('statusText');
+        const loader = document.getElementById('loader');
+        const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        // Buttons
+        const checkGrammarBtn = document.getElementById('checkGrammarBtn');
+        const plagiarismBtn = document.getElementById('plagiarismBtn');
+        const factCheckBtn = document.getElementById('factCheckBtn');
+        const getIdeasBtn = document.getElementById('getIdeasBtn');
+        const summarizeBtn = document.getElementById('summarizeBtn');
+        const toneBtn = document.getElementById('toneBtn');
+        const readAloudBtn = document.getElementById('readAloudBtn');
+        const clearHighlightsBtn = document.getElementById('clearHighlightsBtn');
+        
+        // Modals
+        const resultsModal = document.getElementById('resultsModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const toneModal = document.getElementById('toneModal');
+        const closeToneModalBtn = document.getElementById('closeToneModalBtn');
+
+        // Tooltip
+        const tooltip = document.getElementById('tooltip');
+        const tooltipContent = document.getElementById('tooltipContent');
+
+        // --- API Configuration ---
+        const API_KEY = ""; // Canvas will provide this.
+        const GENERATE_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${API_KEY}`;
+        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+        
+        // --- State Management ---
+        let originalTextMap = new Map();
+        let suggestionCounter = 0;
+        let currentAudioUrl = null;
+
+        // --- Utility Functions ---
+        function setStatus(text, isLoading = false) {
+            statusText.textContent = text;
+            loader.classList.toggle('hidden', !isLoading);
+        }
+
+        function showModal(title, content) {
+            modalTitle.textContent = title;
+            modalContent.innerHTML = content;
+            resultsModal.style.display = 'flex';
+        }
+
+        function hideModal() {
+            resultsModal.style.display = 'none';
+        }
+
+        function showToneModal() { toneModal.style.display = 'flex'; }
+        function hideToneModal() { toneModal.style.display = 'none'; }
+
+        function showTooltip(targetElement, content) {
+            tooltipContent.innerHTML = content;
+            tooltip.style.display = 'block';
+            const rect = targetElement.getBoundingClientRect();
+            tooltip.style.left = `${rect.left + window.scrollX + (rect.width / 2) - (tooltip.offsetWidth / 2)}px`;
+            tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        }
+        
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+
+        // --- Core API Call Function ---
+        async function callGeminiAPI(apiUrl, payload, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    console.error(`API call attempt ${i + 1} failed:`, error);
+                    if (i === retries - 1) {
+                        setStatus('Error: Could not connect to the AI service.');
+                        return null;
+                    }
+                    await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+                }
+            }
+        }
+        
+        // --- Highlighting Logic ---
+        function applyHighlights(highlights) {
+            // ... (rest of the function is unchanged from previous version)
+            let content = editor.textContent;
+            let offset = 0;
+            highlights.sort((a, b) => a.index - b.index);
+
+            highlights.forEach(h => {
+                suggestionCounter++;
+                const id = `suggestion-${suggestionCounter}`;
+                originalTextMap.set(id, h.original);
+
+                const before = content.substring(0, h.index + offset);
+                const original = content.substring(h.index + offset, h.index + offset + h.original.length);
+                const after = content.substring(h.index + offset + h.original.length);
+                
+                const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`;
+                content = before + span + after;
+                offset += span.length - h.original.length;
+            });
+            editor.innerHTML = content;
+        }
+
+        function clearHighlights() {
+            // ... (rest of the function is unchanged from previous version)
+            setStatus('Clearing highlights...');
+            editor.querySelectorAll('.highlight').forEach(span => {
+                const originalText = originalTextMap.get(span.id) || span.textContent;
+                span.replaceWith(document.createTextNode(originalText));
+            });
+            editor.normalize();
+            setStatus('Ready');
+            hideTooltip();
+        }
+
+        // --- Feature Implementations ---
+
+        // 1. Grammar & Style Check
+        async function checkGrammarAndStyle() {
+            // ... (rest of the function is unchanged from previous version)
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Checking grammar and style...', true);
+            hideTooltip();
+
+            const systemPrompt = `You are a writing assistant. Analyze the following text for spelling, grammar, and style errors. Respond with a JSON array of objects. Each object should have "original" (the exact text with the error), "suggestion" (the correction), "type" (either "highlight-spell" for spelling or "highlight-grammar" for grammar/style), and "explanation".`;
+            const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
+            const result = await callGeminiAPI(GENERATE_API_URL, payload);
+            if (!result) return;
+
+            const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            try {
+                const errors = JSON.parse(jsonResponse);
+                if (errors.length === 0) return setStatus('No issues found.');
+                const highlights = [];
+                let currentIndex = 0;
+                errors.forEach(error => {
+                    const index = text.indexOf(error.original, currentIndex);
+                    if (index !== -1) {
+                        highlights.push({ ...error, index });
+                        currentIndex = index + error.original.length;
+                    }
+                });
+                clearHighlights();
+                applyHighlights(highlights);
+                setStatus(`${highlights.length} suggestions found. Click on highlights to see them.`);
+            } catch (e) {
+                console.error("Error parsing grammar JSON:", e, jsonResponse);
+                setStatus('Error processing AI response.');
+            }
+        }
+
+        // 2. Plagiarism Check
+        async function checkPlagiarism() {
+            // ... (rest of the function is unchanged from previous version)
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Checking for plagiarism...', true);
+
+            const systemPrompt = "Analyze the provided text. Identify sentences that might be plagiarized by searching for exact matches online. Return a JSON object with a key 'plagiarismSources' which is an array of objects. Each object should have 'sentence' and 'source' (the URL where it was found).";
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
+            const result = await callGeminiAPI(GENERATE_API_URL, payload);
+            if (!result) return;
+            
+            const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            try {
+                const results = JSON.parse(jsonResponse);
+                let modalHtml = `<p class="mb-4">This check looks for exact matches online. Common phrases may be flagged. Always verify the context.</p>`;
+                if (results.plagiarismSources && results.plagiarismSources.length > 0) {
+                    modalHtml += results.plagiarismSources.map(item => `<div class="mb-4 p-3 border rounded-lg bg-gray-50"><p class="font-semibold text-gray-800">Sentence:</p><blockquote class="pl-3 italic border-l-2 my-1">"${item.sentence}"</blockquote><p class="font-semibold text-gray-800 mt-2">Potential Source:</p><a href="${item.source}" target="_blank" class="text-blue-600 hover:underline break-all">${item.source}</a></div>`).join('');
+                } else {
+                    modalHtml += `<p class="text-green-600 font-semibold">No direct matches found online.</p>`;
+                }
+                showModal('Plagiarism Check Results', modalHtml);
+            } catch (e) {
+                console.error("Error parsing plagiarism JSON:", e);
+                showModal('Error', '<p>Could not process the plagiarism check results.</p>');
+            }
+            setStatus('Plagiarism check complete.');
+        }
+
+        // 3. Fact-Check
+        async function factCheck() {
+            // ... (rest of the function is unchanged from previous version)
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Identifying and verifying facts...', true);
+
+            const claimPrompt = `From the text below, identify verifiable factual claims. Return a JSON object with a "claims" key, containing an array of strings. Text: """${text}"""`;
+            const claimPayload = { contents: [{ parts: [{ text: claimPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
+            const claimResponse = await callGeminiAPI(GENERATE_API_URL, claimPayload);
+            if (!claimResponse) return;
+            
+            let claims;
+            try { claims = JSON.parse(claimResponse.candidates?.[0]?.content?.parts?.[0]?.text).claims; } catch (e) { return setStatus('Could not identify facts to check.'); }
+            if (!claims || claims.length === 0) return setStatus('No verifiable facts found in the text.');
+            
+            setStatus(`Found ${claims.length} claims. Verifying...`, true);
+
+            const verificationPromises = claims.map(claim => {
+                 const verifyPrompt = `Verify this claim: "${claim}". Provide a short verification summary, a confidence level ("Verified", "Likely True", "Uncertain", "Likely False", "False"), and the top source URL. Respond in JSON format: {"claim": "...", "summary": "...", "confidence": "...", "source": "..."}`;
+                 const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
+                return callGeminiAPI(GENERATE_API_URL, verifyPayload);
+            });
+            
+            const results = await Promise.all(verificationPromises);
+            let modalHtml = `<p class="mb-4">AI-powered fact-checking. Information may not be 100% accurate. Always verify sources.</p>`;
+            results.forEach(res => {
+                if (res) {
+                    try {
+                        const verification = JSON.parse(res.candidates?.[0]?.content?.parts?.[0]?.text);
+                        const confidenceColor = {"Verified": "text-green-600 bg-green-100", "Likely True": "text-emerald-600 bg-emerald-100", "Uncertain": "text-yellow-600 bg-yellow-100", "Likely False": "text-orange-600 bg-orange-100", "False": "text-red-600 bg-red-100"}[verification.confidence] || "text-gray-600 bg-gray-100";
+                        modalHtml += `<div class="mb-4 p-3 border rounded-lg"><p class="font-semibold">Claim:</p><blockquote class="pl-3 italic border-l-2 my-1">"${verification.claim}"</blockquote><p class="font-semibold mt-2">Verdict: <span class="font-bold px-2 py-1 rounded-md ${confidenceColor}">${verification.confidence}</span></p><p class="mt-1">${verification.summary}</p><p class="font-semibold mt-2">Source:</p><a href="${verification.source}" target="_blank" class="text-blue-600 hover:underline break-all">${verification.source}</a></div>`;
+                    } catch (e) { console.error("Error parsing verification JSON:", e); }
+                }
+            });
+            showModal('Fact-Check Results', modalHtml);
+            setStatus('Fact-check complete.');
+        }
+
+        // 4. Get Ideas
+        async function getIdeas() {
+            // ... (rest of the function is unchanged from previous version)
+            const topic = prompt("What topic do you want ideas for?");
+            if (!topic) return;
+
+            setStatus(`Brainstorming ideas for "${topic}"...`, true);
+            const systemPrompt = "You are a creative assistant. Brainstorm a list of interesting ideas, angles, and talking points for the given topic. Format your response as a well-structured list using HTML.";
+            const payload = { contents: [{ parts: [{ text: `Topic: ${topic}` }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+            const result = await callGeminiAPI(GENERATE_API_URL, payload);
+            if(result) {
+                showModal(`Ideas for "${topic}"`, result.candidates?.[0]?.content?.parts?.[0]?.text);
+            }
+            setStatus('Ready.');
+        }
+
+        // --- NEW FEATURES ---
+
+        // 5. Summarize Text
+        async function summarizeText() {
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Summarizing text...', true);
+            const systemPrompt = "You are a helpful assistant. Summarize the following text into a few key bullet points. Respond using HTML list formatting (`<ul>` and `<li>`).";
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+            
+            const result = await callGeminiAPI(GENERATE_API_URL, payload);
+            if (result) {
+                const summaryHtml = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                showModal('Summary', summaryHtml);
+            }
+            setStatus('Summary complete.');
+        }
+
+        // 6. Change Tone
+        async function changeTone(tone) {
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            hideToneModal();
+            setStatus(`Changing tone to ${tone}...`, true);
+            
+            const systemPrompt = `You are a writing assistant. Rewrite the following text in a ${tone} tone. Return only the rewritten text, without any introductory phrases or explanations.`;
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+
+            const result = await callGeminiAPI(GENERATE_API_URL, payload);
+            if (result) {
+                editor.textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                clearHighlights();
+            }
+            setStatus(`Tone changed to ${tone}.`);
+        }
+
+        // 7. Read Aloud (Text-to-Speech)
+        async function readAloud() {
+            const text = editor.textContent;
+            if (!text.trim()) return setStatus('Editor is empty.');
+            setStatus('Generating audio...', true);
+            if(currentAudioUrl) {
+                URL.revokeObjectURL(currentAudioUrl);
+            }
+
+            const payload = {
+                contents: [{ parts: [{ text: `Say this naturally: ${text}` }] }],
+                generationConfig: { responseModalities: ["AUDIO"] },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            const result = await callGeminiAPI(TTS_API_URL, payload);
+            const audioData = result?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (!audioData) return setStatus('Failed to generate audio.');
+
+            try {
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBlob = pcmToWav(pcm16);
+                currentAudioUrl = URL.createObjectURL(wavBlob);
+                audioPlayer.src = currentAudioUrl;
+                audioPlayerContainer.classList.remove('hidden');
+                audioPlayer.play();
+                setStatus('Playing audio.');
+            } catch (e) {
+                console.error("Error processing audio data:", e);
+                setStatus('Error playing audio.');
+            }
+        }
+        
+        // --- Audio Helper Functions ---
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+            const blockAlign = channels * (bitsPerSample / 8);
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = pcmData.length * (bitsPerSample / 8);
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+            
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, channels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcmData.length; i++, offset += 2) {
+                view.setInt16(offset, pcmData[i], true);
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+        
+        // --- Event Listeners ---
+        checkGrammarBtn.addEventListener('click', checkGrammarAndStyle);
+        plagiarismBtn.addEventListener('click', checkPlagiarism);
+        factCheckBtn.addEventListener('click', factCheck);
+        getIdeasBtn.addEventListener('click', getIdeas);
+        summarizeBtn.addEventListener('click', summarizeText);
+        toneBtn.addEventListener('click', showToneModal);
+        readAloudBtn.addEventListener('click', readAloud);
+        clearHighlightsBtn.addEventListener('click', clearHighlights);
+        
+        closeModalBtn.addEventListener('click', hideModal);
+        closeToneModalBtn.addEventListener('click', hideToneModal);
+
+        document.querySelectorAll('.tone-option-btn').forEach(btn => {
+            btn.addEventListener('click', () => changeTone(btn.dataset.tone));
+        });
+
+        editor.addEventListener('click', (e) => {
+            if (e.target.classList.contains('highlight')) {
+                const target = e.target;
+                const suggestion = target.dataset.suggestion;
+                const explanation = target.dataset.explanation;
+                let tooltipHtml = `<p class="text-sm text-gray-300">${explanation}</p><button class="suggestion-btn" onclick="applySuggestion('${target.id}', '${suggestion}')">${suggestion}</button>`;
+                showTooltip(target, tooltipHtml);
+                e.stopPropagation();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!tooltip.contains(e.target)) hideTooltip();
+        });
+
+        function applySuggestion(spanId, suggestion) {
+            const span = document.getElementById(spanId);
+            if (span) {
+                span.replaceWith(document.createTextNode(suggestion));
+                editor.normalize();
+                hideTooltip();
+            }
+        }
+    </script>
+</body>
+</html>
+

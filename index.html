@@ -71,6 +71,7 @@
                 <button id="checkGrammarBtn" class="action-btn flex-1 sm:flex-none bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Grammar & Style</button>
                 <button id="plagiarismBtn" class="action-btn flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Plagiarism Check</button>
                 <button id="factCheckBtn" class="action-btn flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Fact-Check</button>
+                <button id="aiContentBtn" class="action-btn flex-1 sm:flex-none bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">AI Content Check</button>
                 <button id="summarizeBtn" class="action-btn flex-1 sm:flex-none bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Summarize</button>
                 <button id="readAloudBtn" class="action-btn flex-1 sm:flex-none bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Read Aloud</button>
                 <button id="clearHighlightsBtn" class="flex-1 sm:flex-none bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Clear Highlights</button>
@@ -309,13 +310,11 @@
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking for plagiarism...', true);
             const systemPrompt = `Analyze the text. Find sentences that might be plagiarized by searching for exact matches online. Return ONLY a valid JSON object with a single key 'plagiarismSources' which is an array of objects. Each object must have a 'sentence' and a 'source' key. Example: { "plagiarismSources": [ { "sentence": "...", "source": "..." } ] }. Do not add any explanatory text.`;
-            // FIX: Removed generationConfig to allow tool use
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }] };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
-                // The response is not guaranteed to be perfect JSON, so we clean it up
                 const cleanJsonResponse = jsonResponse.substring(jsonResponse.indexOf('{'), jsonResponse.lastIndexOf('}') + 1);
                 const results = JSON.parse(cleanJsonResponse);
                 let modalHtml = `<p class="mb-4">This check looks for exact matches online. Common phrases may be flagged. Always verify the context.</p>`;
@@ -347,7 +346,6 @@
             setStatus(`Found ${claims.length} claims. Verifying...`, true);
             const verificationPromises = claims.map(claim => {
                  const verifyPrompt = `Verify this claim: "${claim}". Provide a short summary, a confidence level ("Verified", "Uncertain", "False", etc.), and the top source URL. Respond ONLY with a valid JSON object with keys: "claim", "summary", "confidence", "source". Do not add any other text.`;
-                 // FIX: Removed generationConfig to allow tool use
                  const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }] };
                 return callGeminiAPI('gemini-2.5-flash-preview-05-20', verifyPayload);
             });
@@ -375,8 +373,31 @@
             showModal('Fact-Check Results', modalHtml);
             setStatus('Fact-check complete.');
         }
+
+        async function checkAiContent() {
+            const text = editor.textContent;
+            if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
+            setStatus('Analyzing for AI-generated content...', true);
+            const systemPrompt = `Analyze the provided text to determine the likelihood that it was written by an AI. Consider factors like uniformity, complexity, and common AI phrasing. Respond ONLY with a valid JSON object with two keys: "probability", a number between 0 and 1 representing the probability of AI generation, and "explanation", a brief rationale for your score.`;
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
+            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            if (!result) return;
+            const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            try {
+                const analysis = JSON.parse(jsonResponse);
+                const percentage = (analysis.probability * 100).toFixed(0);
+                let modalHtml = `<p class="mb-4">This analysis is an estimate and should not be used as definitive proof. It's a tool to aid in your review process.</p>`;
+                modalHtml += `<div class="text-center mb-4"><p class="text-lg font-medium">Likelihood of AI Content:</p><p class="text-4xl font-bold text-purple-600">${percentage}%</p></div>`;
+                modalHtml += `<div class="p-3 border rounded-lg bg-gray-50"><p class="font-semibold text-gray-800">Rationale:</p><p>${analysis.explanation}</p></div>`;
+                showModal('AI Content Analysis', modalHtml);
+            } catch (e) {
+                console.error("Error parsing AI content JSON:", e, jsonResponse);
+                showModal('Error', '<p>Could not process the AI content analysis. The response was not in the expected format.</p>');
+            }
+            setStatus('AI content analysis complete.');
+        }
         
-        async function summarizeText() { /* ... unchanged ... */
+        async function summarizeText() {
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Summarizing text...', true);
@@ -386,7 +407,7 @@
             if (result) showModal('Summary', result.candidates?.[0]?.content?.parts?.[0]?.text);
             setStatus('Summary complete.');
          }
-        async function readAloud() { /* ... unchanged ... */ 
+        async function readAloud() { 
             const text = editor.textContent;
             if (!text.trim()) return setStatus('Editor is empty.');
             setStatus('Generating audio...', true);
@@ -416,6 +437,7 @@
             document.getElementById('checkGrammarBtn').addEventListener('click', checkGrammarAndStyle);
             document.getElementById('plagiarismBtn').addEventListener('click', checkPlagiarism);
             document.getElementById('factCheckBtn').addEventListener('click', factCheck);
+            document.getElementById('aiContentBtn').addEventListener('click', checkAiContent);
             document.getElementById('summarizeBtn').addEventListener('click', summarizeText);
             document.getElementById('readAloudBtn').addEventListener('click', readAloud);
             clearHighlightsBtn.addEventListener('click', clearHighlights);
@@ -447,7 +469,6 @@
                 const id = `suggestion-${suggestionCounter}`; 
                 originalTextMap.set(id, h.original); 
                 const before = content.substring(0, h.index + offset);
-                // FIX: Corrected the substring logic to prevent document corruption
                 const original = content.substring(h.index + offset, h.index + offset + h.original.length); 
                 const after = content.substring(h.index + offset + h.original.length); 
                 const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`; 
@@ -458,14 +479,14 @@
         }
         function clearHighlights() { setStatus('Clearing highlights...'); editor.querySelectorAll('.highlight').forEach(span => { const originalText = originalTextMap.get(span.id) || span.textContent; span.replaceWith(document.createTextNode(originalText)); }); editor.normalize(); setStatus('Ready'); hideTooltip(); }
         
-        function base64ToArrayBuffer(base64) { /* ... unchanged ... */
+        function base64ToArrayBuffer(base64) {
             const binaryString = window.atob(base64);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
             for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
             return bytes.buffer;
          }
-        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) { /* ... unchanged ... */ 
+        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) { 
             const blockAlign = channels * (bitsPerSample / 8);
             const byteRate = sampleRate * blockAlign;
             const dataSize = pcmData.length * (bitsPerSample / 8);

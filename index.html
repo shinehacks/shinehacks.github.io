@@ -59,7 +59,6 @@
                     <input id="fileUpload" type="file" class="hidden" accept=".pdf,.docx" />
                 </label>
             </div>
-            <!-- NEW: Progress Bar -->
             <div id="progressContainer" class="w-full bg-gray-200 rounded-full h-2.5 mt-3 hidden">
                 <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
             </div>
@@ -73,7 +72,6 @@
                 <button id="plagiarismBtn" class="action-btn flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Plagiarism Check</button>
                 <button id="factCheckBtn" class="action-btn flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Fact-Check</button>
                 <button id="summarizeBtn" class="action-btn flex-1 sm:flex-none bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Summarize</button>
-                <!-- NEW: Read Aloud Button -->
                 <button id="readAloudBtn" class="action-btn flex-1 sm:flex-none bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">✨ Read Aloud</button>
                 <button id="clearHighlightsBtn" class="flex-1 sm:flex-none bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">Clear Highlights</button>
             </div>
@@ -87,7 +85,6 @@
                 <span id="statusText">Ready</span>
             </div>
             
-            <!-- NEW: Audio Player -->
             <div id="audioPlayerContainer" class="mt-4 hidden">
                 <audio id="audioPlayer" controls class="w-full"></audio>
             </div>
@@ -164,9 +161,9 @@
                 setTimeout(() => progressContainer.classList.add('hidden'), 500);
             };
 
-            const onError = (fileName, errorMsg) => {
+            const onError = (fileName, errorMsg, userFriendlyMsg) => {
                 console.error(errorMsg);
-                setStatus(`Error: Could not read ${fileName}.`);
+                setStatus(userFriendlyMsg || `Error: Could not read ${fileName}.`);
                 fileNameDisplay.textContent = `Failed to load: ${fileName}`;
                 progressContainer.classList.add('hidden');
             };
@@ -185,12 +182,13 @@
                         editor.textContent = textContent;
                         onSuccess(file.name);
                     } catch (error) {
-                        onError(file.name, `Error parsing PDF: ${error}`);
+                        const userMessage = "Failed to read .pdf file. It may be corrupt, encrypted, or in a format that could not be processed.";
+                        onError(file.name, `Error parsing PDF: ${error}`, userMessage);
                     }
                 };
                 reader.readAsArrayBuffer(file);
             } else if (file.name.endsWith('.docx')) {
-                progressBar.style.width = '50%'; // Indeterminate progress for docx
+                progressBar.style.width = '50%';
                 reader.onload = (e) => {
                     mammoth.extractRawText({ arrayBuffer: e.target.result })
                         .then(result => {
@@ -199,13 +197,13 @@
                             onSuccess(file.name);
                         })
                         .catch(error => {
-                            onError(file.name, `Error parsing DOCX: ${error}`);
+                            const userMessage = "Failed to read .docx file. It may be corrupt, password-protected, or an unsupported format (e.g., .doc instead of .docx).";
+                            onError(file.name, `Error parsing DOCX: ${error}`, userMessage);
                         });
                 };
                 reader.readAsArrayBuffer(file);
             } else {
-                onError(file.name, 'Unsupported file type.');
-                setStatus('Error: Unsupported file type. Please upload a .pdf or .docx file.');
+                onError(file.name, 'Unsupported file type.', 'Error: Unsupported file type. Please upload a .pdf or .docx file.');
             }
         });
         
@@ -274,11 +272,12 @@
                 }
             }
         }
+
         async function checkGrammarAndStyle() {
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking grammar and style...', true);
-            const systemPrompt = `You are a writing assistant. Analyze the text for spelling, grammar, and style errors. Respond with a JSON array of objects. Each object needs: "original", "suggestion", "type" ("highlight-spell" or "highlight-grammar"), and "explanation".`;
+            const systemPrompt = `You are a writing assistant. Analyze the text for spelling, grammar, and style errors. Respond ONLY with a valid JSON array of objects. Each object must have these keys: "original", "suggestion", "type" ("highlight-spell" or "highlight-grammar"), and "explanation". Do not include any text before or after the JSON array.`;
             const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
@@ -289,6 +288,7 @@
                 const highlights = [];
                 let currentIndex = 0;
                 errors.forEach(error => {
+                    if (typeof error.original !== 'string') return;
                     const index = text.indexOf(error.original, currentIndex);
                     if (index !== -1) {
                         highlights.push({ ...error, index });
@@ -303,17 +303,21 @@
                 setStatus('Error processing AI response.');
             }
         }
+
         async function checkPlagiarism() {
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking for plagiarism...', true);
-            const systemPrompt = "Analyze the text. Find sentences that might be plagiarized by searching for exact matches online. Return a JSON object: { 'plagiarismSources': [ { 'sentence': '...', 'source': '...' } ] }.";
-            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
+            const systemPrompt = `Analyze the text. Find sentences that might be plagiarized by searching for exact matches online. Return ONLY a valid JSON object with a single key 'plagiarismSources' which is an array of objects. Each object must have a 'sentence' and a 'source' key. Example: { "plagiarismSources": [ { "sentence": "...", "source": "..." } ] }. Do not add any explanatory text.`;
+            // FIX: Removed generationConfig to allow tool use
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }] };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
-                const results = JSON.parse(jsonResponse);
+                // The response is not guaranteed to be perfect JSON, so we clean it up
+                const cleanJsonResponse = jsonResponse.substring(jsonResponse.indexOf('{'), jsonResponse.lastIndexOf('}') + 1);
+                const results = JSON.parse(cleanJsonResponse);
                 let modalHtml = `<p class="mb-4">This check looks for exact matches online. Common phrases may be flagged. Always verify the context.</p>`;
                 if (results.plagiarismSources && results.plagiarismSources.length > 0) {
                     modalHtml += results.plagiarismSources.map(item => `<div class="mb-4 p-3 border rounded-lg bg-gray-50"><p class="font-semibold text-gray-800">Sentence:</p><blockquote class="pl-3 italic border-l-2 my-1">"${item.sentence}"</blockquote><p class="font-semibold text-gray-800 mt-2">Potential Source:</p><a href="${item.source}" target="_blank" class="text-blue-600 hover:underline break-all">${item.source}</a></div>`).join('');
@@ -322,11 +326,12 @@
                 }
                 showModal('Plagiarism Check Results', modalHtml);
             } catch (e) {
-                console.error("Error parsing plagiarism JSON:", e);
-                showModal('Error', '<p>Could not process the plagiarism check results.</p>');
+                console.error("Error parsing plagiarism JSON:", e, jsonResponse);
+                showModal('Error', '<p>Could not process the plagiarism check results. The AI response was not in the expected format.</p>');
             }
             setStatus('Plagiarism check complete.');
         }
+
         async function factCheck() {
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
@@ -341,26 +346,37 @@
             
             setStatus(`Found ${claims.length} claims. Verifying...`, true);
             const verificationPromises = claims.map(claim => {
-                 const verifyPrompt = `Verify this claim: "${claim}". Provide a short summary, a confidence level ("Verified", "Uncertain", "False", etc.), and the top source URL. Respond in JSON format: {"claim": "...", "summary": "...", "confidence": "...", "source": "..."}`;
-                 const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } };
+                 const verifyPrompt = `Verify this claim: "${claim}". Provide a short summary, a confidence level ("Verified", "Uncertain", "False", etc.), and the top source URL. Respond ONLY with a valid JSON object with keys: "claim", "summary", "confidence", "source". Do not add any other text.`;
+                 // FIX: Removed generationConfig to allow tool use
+                 const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }] };
                 return callGeminiAPI('gemini-2.5-flash-preview-05-20', verifyPayload);
             });
             
             const results = await Promise.all(verificationPromises);
             let modalHtml = `<p class="mb-4">AI-powered fact-checking. Information may not be 100% accurate. Always verify sources.</p>`;
+            let foundFacts = 0;
             results.forEach(res => {
                 if (res) {
                     try {
-                        const verification = JSON.parse(res.candidates?.[0]?.content?.parts?.[0]?.text);
+                        const jsonResponse = res.candidates?.[0]?.content?.parts?.[0]?.text;
+                        const cleanJsonResponse = jsonResponse.substring(jsonResponse.indexOf('{'), jsonResponse.lastIndexOf('}') + 1);
+                        const verification = JSON.parse(cleanJsonResponse);
                         const confidenceColor = {"Verified": "text-green-600 bg-green-100", "Likely True": "text-emerald-600 bg-emerald-100", "Uncertain": "text-yellow-600 bg-yellow-100", "Likely False": "text-orange-600 bg-orange-100", "False": "text-red-600 bg-red-100"}[verification.confidence] || "text-gray-600 bg-gray-100";
                         modalHtml += `<div class="mb-4 p-3 border rounded-lg"><p class="font-semibold">Claim:</p><blockquote class="pl-3 italic border-l-2 my-1">"${verification.claim}"</blockquote><p class="font-semibold mt-2">Verdict: <span class="font-bold px-2 py-1 rounded-md ${confidenceColor}">${verification.confidence}</span></p><p class="mt-1">${verification.summary}</p><p class="font-semibold mt-2">Source:</p><a href="${verification.source}" target="_blank" class="text-blue-600 hover:underline break-all">${verification.source}</a></div>`;
-                    } catch (e) { console.error("Error parsing verification JSON:", e); }
+                        foundFacts++;
+                    } catch (e) { console.error("Error parsing verification JSON:", e, res.candidates?.[0]?.content?.parts?.[0]?.text); }
                 }
             });
+
+            if (foundFacts === 0) {
+                modalHtml += `<p>Could not verify the identified claims. The AI response may have been in an unexpected format.</p>`;
+            }
+
             showModal('Fact-Check Results', modalHtml);
             setStatus('Fact-check complete.');
         }
-        async function summarizeText() {
+        
+        async function summarizeText() { /* ... unchanged ... */
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Summarizing text...', true);
@@ -369,8 +385,8 @@
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (result) showModal('Summary', result.candidates?.[0]?.content?.parts?.[0]?.text);
             setStatus('Summary complete.');
-        }
-        async function readAloud() {
+         }
+        async function readAloud() { /* ... unchanged ... */ 
             const text = editor.textContent;
             if (!text.trim()) return setStatus('Editor is empty.');
             setStatus('Generating audio...', true);
@@ -422,17 +438,34 @@
         function showTooltip(targetElement, content) { tooltipContent.innerHTML = content; tooltip.style.display = 'block'; const rect = targetElement.getBoundingClientRect(); tooltip.style.left = `${rect.left + window.scrollX + (rect.width / 2) - (tooltip.offsetWidth / 2)}px`; tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`; }
         function hideTooltip() { tooltip.style.display = 'none'; }
         function applySuggestion(spanId, suggestion) { const span = document.getElementById(spanId); if (span) { span.replaceWith(document.createTextNode(suggestion)); editor.normalize(); hideTooltip(); } }
-        function applyHighlights(highlights) { let content = editor.textContent; let offset = 0; highlights.sort((a, b) => a.index - b.index); highlights.forEach(h => { suggestionCounter++; const id = `suggestion-${suggestionCounter}`; originalTextMap.set(id, h.original); const before = content.substring(0, h.index + offset); const original = content.substring(h.index + offset, h.original.length); const after = content.substring(h.index + offset + h.original.length); const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`; content = before + span + after; offset += span.length - h.original.length; }); editor.innerHTML = content; }
+        function applyHighlights(highlights) { 
+            let content = editor.textContent; 
+            let offset = 0; 
+            highlights.sort((a, b) => a.index - b.index); 
+            highlights.forEach(h => { 
+                suggestionCounter++; 
+                const id = `suggestion-${suggestionCounter}`; 
+                originalTextMap.set(id, h.original); 
+                const before = content.substring(0, h.index + offset);
+                // FIX: Corrected the substring logic to prevent document corruption
+                const original = content.substring(h.index + offset, h.index + offset + h.original.length); 
+                const after = content.substring(h.index + offset + h.original.length); 
+                const span = `<span id="${id}" class="highlight ${h.type}" data-suggestion="${h.suggestion}" data-explanation="${h.explanation}">${original}</span>`; 
+                content = before + span + after; 
+                offset += span.length - h.original.length; 
+            }); 
+            editor.innerHTML = content; 
+        }
         function clearHighlights() { setStatus('Clearing highlights...'); editor.querySelectorAll('.highlight').forEach(span => { const originalText = originalTextMap.get(span.id) || span.textContent; span.replaceWith(document.createTextNode(originalText)); }); editor.normalize(); setStatus('Ready'); hideTooltip(); }
         
-        function base64ToArrayBuffer(base64) {
+        function base64ToArrayBuffer(base64) { /* ... unchanged ... */
             const binaryString = window.atob(base64);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
             for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
             return bytes.buffer;
-        }
-        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+         }
+        function pcmToWav(pcmData, sampleRate = 24000, channels = 1, bitsPerSample = 16) { /* ... unchanged ... */ 
             const blockAlign = channels * (bitsPerSample / 8);
             const byteRate = sampleRate * blockAlign;
             const dataSize = pcmData.length * (bitsPerSample / 8);

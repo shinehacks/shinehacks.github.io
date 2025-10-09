@@ -34,7 +34,7 @@
     <div class="container mx-auto p-4 md:p-8 max-w-5xl">
         <header class="text-center mb-6">
             <h1 class="text-4xl md:text-5xl font-bold text-gray-900">IntelliWrite Document Reviewer</h1>
-            <p class="text-gray-600 mt-2">Upload a .docx or .pdf file to begin your AI-powered review.</p>
+            <p class="text-gray-600 mt-2">Upload a .docx or .pdf file to begin your review.</p>
         </header>
         
         <div id="apiKeySection" class="api-key-bar bg-red-100 border border-red-300 p-4 rounded-lg mb-6 shadow-sm">
@@ -75,6 +75,7 @@
                 <button id="spellCheckBtn" class="action-btn flex-1 sm:flex-none bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Spell Check</button>
                 <button id="vocabEnhancerBtn" class="action-btn flex-1 sm:flex-none bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Vocabulary</button>
                 <button id="changeToneBtn" class="action-btn flex-1 sm:flex-none bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Change Tone</button>
+                <button id="humanizeBtn" class="action-btn flex-1 sm:flex-none bg-pink-500 hover:bg-pink-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Humanize Text</button>
                 <button id="plagiarismBtn" class="action-btn flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Plagiarism</button>
                 <button id="factCheckBtn" class="action-btn flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Fact-Check</button>
                 <button id="aiContentBtn" class="action-btn flex-1 sm:flex-none bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">AI Check</button>
@@ -399,7 +400,7 @@
         }
 
         async function rewriteTextInTone(tone) {
-            resultsModal.style.display = 'none'; // Close the modal
+            resultsModal.style.display = 'none'; 
             const text = editor.textContent;
             if (!text.trim()) return;
             setStatus(`Rewriting text in a ${tone.toLowerCase()} tone...`, true);
@@ -410,6 +411,25 @@
                 editor.textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
             }
             setStatus(`Text successfully rewritten in a ${tone.toLowerCase()} tone.`);
+        }
+
+        async function humanizeText() {
+            const text = editor.textContent;
+            if (!text.trim()) { setStatus('Editor is empty.'); return; }
+            setStatus('Humanizing text to evade AI detection...', true);
+            const systemPrompt = `You are an expert in linguistics and writing styles. Your task is to rewrite the following text to make it sound as if it were written by a human, with the specific goal of bypassing AI content detectors. To achieve this, you must:
+1.  Introduce variations in sentence length and structure. Use a mix of short, punchy sentences and longer, more complex ones.
+2.  Incorporate slight informalities, personal tone, or common expressions where appropriate, without sacrificing the core meaning.
+3.  Vary word choices to avoid repetitive or overly formal language often used by AI.
+4.  Break up uniform paragraphs and introduce more natural transitions.
+5.  Focus on perplexity and burstiness in the text.
+Respond ONLY with the rewritten, humanized text. Do not add any introductory phrases, explanations, or sign-offs.`;
+            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            if (result) {
+                editor.textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            }
+            setStatus('Text has been humanized.');
         }
 
         async function checkPlagiarism() {
@@ -547,6 +567,7 @@
             document.getElementById('spellCheckBtn').addEventListener('click', checkSpelling);
             document.getElementById('vocabEnhancerBtn').addEventListener('click', enhanceVocabulary);
             document.getElementById('changeToneBtn').addEventListener('click', openToneChanger);
+            document.getElementById('humanizeBtn').addEventListener('click', humanizeText);
             document.getElementById('plagiarismBtn').addEventListener('click', checkPlagiarism);
             document.getElementById('factCheckBtn').addEventListener('click', factCheck);
             document.getElementById('aiContentBtn').addEventListener('click', checkAiContent);

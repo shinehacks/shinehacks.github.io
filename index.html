@@ -436,7 +436,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking for plagiarism...', true);
-            const systemPrompt = `Analyze the text. Find sentences that might be plagiarized by searching for exact matches online. Return ONLY a valid JSON object with a single key 'plagiarismSources' which is an array of objects. Each object must have a 'sentence' and a 'source' key. Example: { "plagiarismSources": [ { "sentence": "...", "source": "..." } ] }. Do not add any explanatory text.`;
+            const systemPrompt = `First, count the total number of sentences in the provided text. Second, find sentences that might be plagiarized by searching for exact matches online. Return ONLY a valid JSON object with two keys: "totalSentences" (a number), and "plagiarismSources" (an array of objects, where each object has a 'sentence' and 'source' key). Example: { "totalSentences": 15, "plagiarismSources": [ { "sentence": "...", "source": "..." } ] }.`;
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }] };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
@@ -444,8 +444,14 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             try {
                 const cleanJsonResponse = jsonResponse.substring(jsonResponse.indexOf('{'), jsonResponse.lastIndexOf('}') + 1);
                 const results = JSON.parse(cleanJsonResponse);
-                let modalHtml = `<p class="mb-4">This check looks for exact matches online. Common phrases may be flagged. Always verify the context.</p>`;
-                if (results.plagiarismSources && results.plagiarismSources.length > 0) {
+                const totalSentences = results.totalSentences || 0;
+                const plagiarizedCount = results.plagiarismSources ? results.plagiarismSources.length : 0;
+                const percentage = totalSentences > 0 ? ((plagiarizedCount / totalSentences) * 100).toFixed(0) : 0;
+                
+                let modalHtml = `<div class="text-center mb-4"><p class="text-lg font-medium">Plagiarism Detected:</p><p class="text-4xl font-bold text-green-600">${percentage}%</p></div>`;
+                modalHtml += `<p class="mb-4">This check looks for exact matches online. Common phrases may be flagged. Always verify the context.</p>`;
+
+                if (plagiarizedCount > 0) {
                     modalHtml += results.plagiarismSources.map(item => `<div class="mb-4 p-3 border rounded-lg bg-gray-50"><p class="font-semibold text-gray-800">Sentence:</p><blockquote class="pl-3 italic border-l-2 my-1">"${item.sentence}"</blockquote><p class="font-semibold text-gray-800 mt-2">Potential Source:</p><a href="${item.source}" target="_blank" class="text-blue-600 hover:underline break-all">${item.source}</a></div>`).join('');
                 } else {
                     modalHtml += `<p class="text-green-600 font-semibold">No direct matches found online.</p>`;
@@ -505,7 +511,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             const text = editor.textContent;
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Analyzing for AI-generated content...', true);
-            const systemPrompt = `Analyze the provided text to determine the likelihood that it was written by an AI. Consider factors like uniformity, complexity, and common AI phrasing. Respond ONLY with a valid JSON object with two keys: "probability", a number between 0 and 1 representing the probability of AI generation, and "explanation", a brief rationale for your score.`;
+            const systemPrompt = `You are an expert AI content detector. Analyze the provided text to determine the likelihood that it was written by an AI. Evaluate it based on metrics like **perplexity** (uniformity of word choice) and **burstiness** (variation in sentence structure and length). Look for overly formal language, lack of personal voice, and unnaturally smooth transitions. Respond ONLY with a valid JSON object with two keys: "probability" (a number between 0 and 1) and "explanation" (a brief rationale for your score, referencing perplexity and burstiness).`;
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;

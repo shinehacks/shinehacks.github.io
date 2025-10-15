@@ -437,7 +437,12 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Checking for plagiarism...', true);
             const systemPrompt = `First, count the total number of sentences in the provided text. Second, find sentences that might be plagiarized by searching for exact matches online. Return ONLY a valid JSON object with two keys: "totalSentences" (a number), and "plagiarismSources" (an array of objects, where each object has a 'sentence' and 'source' key). Example: { "totalSentences": 15, "plagiarismSources": [ { "sentence": "...", "source": "..." } ] }.`;
-            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }] };
+            const payload = { 
+                contents: [{ parts: [{ text }] }], 
+                systemInstruction: { parts: [{ text: systemPrompt }] }, 
+                tools: [{ "google_search": {} }],
+                generationConfig: { temperature: 0 } 
+            };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -512,7 +517,14 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             if (!text.trim()) { setStatus('Editor is empty. Upload a file first.'); return; }
             setStatus('Analyzing for AI-generated content...', true);
             const systemPrompt = `You are an expert AI content detector. Analyze the provided text to determine the likelihood that it was written by an AI. Evaluate it based on metrics like **perplexity** (uniformity of word choice) and **burstiness** (variation in sentence structure and length). Look for overly formal language, lack of personal voice, and unnaturally smooth transitions. Respond ONLY with a valid JSON object with two keys: "probability" (a number between 0 and 1) and "explanation" (a brief rationale for your score, referencing perplexity and burstiness).`;
-            const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
+            const payload = { 
+                contents: [{ parts: [{ text }] }], 
+                systemInstruction: { parts: [{ text: systemPrompt }] }, 
+                generationConfig: { 
+                    responseMimeType: "application/json",
+                    temperature: 0
+                } 
+            };
             const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;

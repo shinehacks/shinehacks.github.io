@@ -288,7 +288,7 @@
             setStatus('Performing full review...', true);
             const systemPrompt = `You are an expert editor and writing coach. Analyze the following document and provide a comprehensive review. Structure your feedback using HTML. Your review must cover the following four sections, each with its own \`<h3>\` heading and styled with Tailwind CSS classes for better presentation (e.g., 'text-xl font-semibold mb-2 text-gray-800'): 1. **<h3>Clarity & Readability</h3>** * Evaluate the text for clarity, simplicity, and ease of understanding in a paragraph. * Use a \`<ul>\` to list any jargon, convoluted sentences, or ambiguous phrasing. * Provide a readability score (e.g., High School, College, etc.) and suggest improvements. 2. **<h3>Structure & Organization</h3>** * Assess the logical flow of the document in a paragraph. * Comment on the introduction, body, and conclusion. * Use a \`<ul>\` to list suggestions for improving transitions or topic sentences. 3. **<h3>Grammar & Language Quality</h3>** * Summarize the overall quality of the grammar, spelling, and punctuation. * Comment on the tone, style, and word choice. 4. **<h3>Content Value & Depth</h3>** * Evaluate the substance and depth of the content in a paragraph. * Does the text provide valuable insights? Is the analysis thorough? * Use a \`<ul>\` to identify any gaps or areas that could be explored in more detail. * Provide constructive feedback on how to increase the value and impact of the content. Provide your final output as a single block of well-formatted HTML. Use classes like 'p-2 rounded-lg bg-gray-100 mb-2' for list items to make them distinct.`;
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (result) {
                 showModal('Comprehensive Document Review', result.candidates?.[0]?.content?.parts?.[0]?.text);
             }
@@ -301,7 +301,7 @@
             setStatus('Checking grammar and style...', true);
             const systemPrompt = `You are a writing assistant. Analyze the text for spelling, grammar, and style errors. Respond ONLY with a valid JSON array of objects. Each object must have these keys: "original", "suggestion", "type" ("highlight-spell" or "highlight-grammar"), and "explanation". Do not include any text before or after the JSON array.`;
             const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
@@ -332,7 +332,7 @@
             setStatus('Checking for spelling errors...', true);
             const systemPrompt = `Analyze the text for spelling errors ONLY. Respond with a valid JSON array of objects. Each object must have: "original", "suggestion", "type" (must be "highlight-spell"), and "explanation".`;
             const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
@@ -363,7 +363,7 @@
             setStatus('Enhancing vocabulary...', true);
             const systemPrompt = `You are a vocabulary assistant. Identify words or short phrases in the text that could be replaced with more dynamic, interesting, or precise language. Respond with a valid JSON array of objects. Each object must have: "original", "suggestion" (a stronger alternative), "type" (must be "highlight-vocab"), and "explanation" (why the suggestion is better).`;
             const payload = { contents: [{ parts: [{ text: `Text: """${text}"""` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
@@ -406,7 +406,7 @@
             setStatus(`Rewriting text in a ${tone.toLowerCase()} tone...`, true);
             const systemPrompt = `You are a writing assistant. Rewrite the following text to adopt a ${tone} tone. Respond ONLY with the rewritten text, without any additional commentary or explanation.`;
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (result) {
                 editor.textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
             }
@@ -425,7 +425,7 @@
 5.  Focus on perplexity and burstiness in the text.
 Respond ONLY with the rewritten, humanized text. Do not add any introductory phrases, explanations, or sign-offs.`;
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (result) {
                 editor.textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
             }
@@ -443,7 +443,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
                 tools: [{ "google_search": {} }],
                 generationConfig: { temperature: 0 } 
             };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
@@ -475,7 +475,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             setStatus('Identifying and verifying facts...', true);
             const claimPrompt = `From the text, identify verifiable factual claims. Return a JSON object: { "claims": ["claim 1", "claim 2"] }. Text: """${text}"""`;
             const claimPayload = { contents: [{ parts: [{ text: claimPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
-            const claimResponse = await callGeminiAPI('gemini-2.5-flash-preview-05-20', claimPayload);
+            const claimResponse = await callGeminiAPI('gemini-2.5-flash', claimPayload);
             if (!claimResponse) return;
             let claims;
             try { claims = JSON.parse(claimResponse.candidates?.[0]?.content?.parts?.[0]?.text).claims; } catch (e) { return setStatus('Could not identify facts to check.'); }
@@ -485,7 +485,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             const verificationPromises = claims.map(claim => {
                  const verifyPrompt = `Verify this claim: "${claim}". Provide a short summary, a confidence level ("Verified", "Uncertain", "False", etc.), and the top source URL. Respond ONLY with a valid JSON object with keys: "claim", "summary", "confidence", "source". Do not add any other text.`;
                  const verifyPayload = { contents: [{ parts: [{ text: verifyPrompt }] }], tools: [{ "google_search": {} }] };
-                return callGeminiAPI('gemini-2.5-flash-preview-05-20', verifyPayload);
+                return callGeminiAPI('gemini-2.5-flash', verifyPayload);
             });
             
             const results = await Promise.all(verificationPromises);
@@ -525,7 +525,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
                     temperature: 0
                 } 
             };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (!result) return;
             const jsonResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
             try {
@@ -548,7 +548,7 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
             setStatus('Summarizing text...', true);
             const systemPrompt = "Summarize the text into key bullet points using HTML list formatting (`<ul>` and `<li>`).";
             const payload = { contents: [{ parts: [{ text }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
-            const result = await callGeminiAPI('gemini-2.5-flash-preview-05-20', payload);
+            const result = await callGeminiAPI('gemini-2.5-flash', payload);
             if (result) showModal('Summary', result.candidates?.[0]?.content?.parts?.[0]?.text);
             setStatus('Summary complete.');
          }
@@ -664,4 +664,3 @@ Respond ONLY with the rewritten, humanized text. Do not add any introductory phr
     </script>
 </body>
 </html>
-
